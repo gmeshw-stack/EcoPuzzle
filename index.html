@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>環保標章立體拼圖 - Eco Mark 3D Puzzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+            touch-action: none; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-canvas"></div>
+
+    <div class="ui-layer flex flex-col justify-between">
+        
+        <!-- HUD 頂部列 -->
+        <div id="hud" class="interactive p-3 sm:p-4 flex justify-between items-center hidden transition-opacity duration-300 gap-2">
+            <div class="glass-panel px-3 py-2 sm:px-5 sm:py-2 rounded-2xl flex items-center gap-2 sm:gap-3">
+                <span class="text-lg sm:text-xl hidden sm:inline">⏱️</span>
+                <span id="timer" class="text-base sm:text-xl font-bold text-slate-800 font-mono w-[70px] sm:w-[85px]">00:00.0</span>
+            </div>
+            
+            <div class="glass-panel px-3 py-1.5 sm:px-5 sm:py-2 rounded-2xl flex items-center gap-2 flex-1 justify-center max-w-[220px]">
+                <span class="text-xs sm:text-sm font-bold text-slate-500 whitespace-nowrap">目標:</span>
+                <img id="hud-target-img" src="" class="w-6 h-6 sm:w-8 sm:h-8 object-contain bg-white rounded-md p-0.5">
+                <span id="hud-target-name" class="font-bold text-slate-800 text-xs sm:text-sm truncate"></span>
+            </div>
+
+            <button onclick="showScreen('start-screen')" class="glass-panel px-3 py-2 sm:px-4 sm:py-2 rounded-xl text-slate-700 font-bold hover:bg-slate-100 transition-colors text-sm sm:text-base">
+                返回
+            </button>
+        </div>
+
+        <div id="rotate-tool" class="interactive absolute hidden z-50 transform -translate-x-1/2 -translate-y-1/2">
+            <button onclick="rotateSelectedZ(event)" class="bg-white/95 backdrop-blur-md border-2 border-emerald-400 text-emerald-600 rounded-full w-14 h-14 flex items-center justify-center shadow-[0_4px_15px_rgba(16,185,129,0.3)] hover:bg-emerald-50 hover:scale-110 active:scale-95 transition-all text-3xl font-black">
+                ↻
+            </button>
+        </div>
+
+        <div id="mode-toggle-container" class="interactive absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-1 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border-2 border-slate-200 hidden transition-all duration-300 z-50">
+            <button id="mode-drag" onclick="setMode('drag')" class="px-5 py-2.5 rounded-xl bg-emerald-500 text-white font-bold shadow-md transition-all flex items-center gap-2 text-lg">
+                <span>✋</span> 移動
+            </button>
+            <button id="mode-rotate" onclick="setMode('rotate')" class="px-5 py-2.5 rounded-xl bg-transparent text-slate-600 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 text-lg">
+                <span>🔄</span> 旋轉
+            </button>
+        </div>
+
+        <div class="flex-1 flex items-center justify-center p-4 z-40">
+            
+            <!-- Loading 畫面 -->
+            <div id="loading-screen" class="interactive glass-panel p-8 rounded-3xl max-w-sm w-full text-center">
+                <div class="text-4xl mb-4 animate-spin">⏳</div>
+                <h2 class="text-2xl font-bold text-slate-800">正在讀取圖片...</h2>
+                <p class="text-slate-500 text-sm mt-2">從 Google Drive 載入中...</p>
+            </div>
+
+            <!-- 開始畫面 -->
+            <div id="start-screen" class="interactive glass-panel p-8 rounded-3xl max-w-lg w-full text-center hidden transition-all duration-300 opacity-0 scale-95">
+                <div class="flex justify-center gap-2 mb-4 text-5xl">
+                    🌱♻️💧
+                </div>
+                <h1 class="text-4xl font-black text-slate-800 mb-4 tracking-tight">環保標章立體拼圖</h1>
+                
+                <div class="bg-slate-50 p-4 rounded-xl text-left mb-6 border border-slate-100">
+                    <h3 class="font-bold text-slate-700 mb-2">🎮 遊戲規則：</h3>
+                    <ul class="list-disc pl-5 text-slate-600 space-y-2 text-sm">
+                        <li>左側/上方是<b>散落區</b>，右側/下方是<b>組合區</b>。</li>
+                        <li><b>滑鼠左鍵按住拖曳</b>：將方塊移動放入組合區。</li>
+                        <li><b>滑鼠右鍵按住拖曳</b>：可以<b>自由立體翻轉</b>方塊。</li>
+                        <li>📱<b>平板/手機玩家</b>：請使用畫面下方的按鈕切換「移動」或「旋轉」。</li>
+                        <li><b>點擊方塊</b>：旁邊會出現<b>翻轉工具 ↻</b>，點擊可直接順時針旋轉90度。</li>
+                    </ul>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button onclick="showScreen('select-screen')" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg transition-transform active:scale-95 text-xl">
+                        選擇題目開始
+                    </button>
+                    <button onclick="showScreen('leaderboard-screen')" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 font-bold py-4 rounded-2xl transition-transform active:scale-95 text-lg">
+                        排行榜
+                    </button>
+                </div>
+            </div>
+
+            <!-- 選擇題目畫面 -->
+            <div id="select-screen" class="interactive glass-panel p-6 sm:p-8 rounded-3xl max-w-2xl w-full text-center hidden transition-all duration-300 opacity-0 scale-95 flex flex-col max-h-[90vh]">
+                <h2 class="text-2xl sm:text-3xl font-black text-slate-800 mb-4 sm:mb-6">選擇你要挑戰的標章</h2>
+                
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6 overflow-y-auto p-1 sm:p-2" id="puzzle-options">
+                    <!-- Javascript 會自動產生選項 -->
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-auto">
+                    <button onclick="startGame(-1)" class="flex-[2] bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 sm:py-4 rounded-2xl shadow-md transition-transform active:scale-95 text-lg sm:text-xl flex items-center justify-center gap-2">
+                        <span>🎲</span> 隨機選擇
+                    </button>
+                    <button onclick="showScreen('start-screen')" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 sm:py-4 rounded-2xl transition-transform active:scale-95 text-lg">
+                        返回
+                    </button>
+                </div>
+            </div>
+
+            <!-- 勝利畫面 -->
+            <div id="win-screen" class="interactive glass-panel p-8 rounded-3xl max-w-md w-full text-center hidden transition-all duration-300 opacity-0 scale-95">
+                <div class="text-7xl mb-4 animate-bounce">🏆</div>
+                <h2 class="text-3xl font-black text-slate-800 mb-2">拼圖完成！</h2>
+                <p class="text-slate-600 mb-2">你成功拼出了 <span id="win-symbol-name" class="font-bold text-emerald-600 text-xl"></span></p>
+                <div class="text-5xl font-mono font-bold text-slate-800 mb-6 py-4 bg-slate-100 rounded-xl shadow-inner">
+                    <span id="win-time">00:00.0</span>
+                </div>
+                
+                <div class="mb-6 text-left">
+                    <label class="block text-sm font-bold text-slate-600 mb-2">輸入你的名字記錄成績：</label>
+                    <input type="text" id="player-name" placeholder="環保小尖兵" class="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition-all text-lg font-bold text-slate-800">
+                </div>
+                
+                <button onclick="submitScore()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg transition-transform active:scale-95 text-xl">
+                    提交成績
+                </button>
+            </div>
+
+            <!-- 排行榜畫面 -->
+            <div id="leaderboard-screen" class="interactive glass-panel p-6 rounded-3xl max-w-md w-full hidden transition-all duration-300 opacity-0 scale-95 flex flex-col max-h-[85vh]">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-black text-slate-800">排行榜</h2>
+                    <button onclick="showScreen('start-screen')" class="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors text-slate-600">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto pr-2">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-slate-500 text-sm border-b-2 border-slate-100">
+                                <th class="pb-3 pl-2 font-bold w-12">排名</th>
+                                <th class="pb-3 font-bold">玩家</th>
+                                <th class="pb-3 font-bold hidden sm:table-cell">主題</th>
+                                <th class="pb-3 text-right pr-2 font-bold">時間</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body">
+                        </tbody>
+                    </table>
+                    <div id="empty-leaderboard" class="text-center py-10 text-slate-400 font-bold hidden">
+                        目前還沒有紀錄，來當第一名吧！
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 基礎設定與初始化
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ecopuzzle';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyAEIxp0FWZH5HxBkjKke70e3K3PpX3Qaw0",
+            authDomain: "ecopuzzle-41e41.firebaseapp.com",
+            projectId: "ecopuzzle-41e41",
+            storageBucket: "ecopuzzle-41e41.firebasestorage.app",
+            messagingSenderId: "600599018976",
+            appId: "1:600599018976:web:6f4558c2a154fba9437f85"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const SYMBOLS_INFO = [
+            { name: '環保標章', bg: '#ffffff' }, 
+            { name: '回收標章', bg: '#ffffff' }, 
+            { name: '節能標章', bg: '#ffffff' }, 
+            { name: '碳足跡標章', bg: '#ffffff' }, 
+            { name: '一級能源標章', bg: '#ffffff' }, 
+            { name: '省水標章', bg: '#ffffff' }  
+        ];
+
+        // 使用 CorsProxy 來讓 Google Drive 圖片可以直接在 WebGL 環境中載入
+        const IMAGE_FILES = [
+            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=16SuarGGRJbNu3P6o6fzOmG6Zeb0B7eA_'), // 0: 環保標章
+            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=15jMIEpqiAVU_T_zza2XzOK5S0o_zhLHL'), // 1: 回收標章
+            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=1okoxb9LmF4ctSoqniZc8Sa5vQmtu7iSu'), // 2: 節能標章
+            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=19pg38_7opuWROc8Y54QbjSxkn-Jcmvuy'), // 3: 碳足跡標章
+            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=1EkC8ej3MPaeqaOpffCYGVongSw7_tuSq'), // 4: 一級能源效率標章
+            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=1TGA0lWBRlBaORyIhm29CGyGYh5YhK5QH')  // 5: 省水標章
+        ];
+
+        let fullCanvases = []; 
+        let isPlaying = false;
+        let isAnimating = false;
+        let startTime = 0;
+        let timerInterval;
+        let finalTimeMs = 0;
+        let targetGameSymbol = 0; 
+        let leaderboard = []; // 改為空陣列，資料將由 Firebase 即時載入
+
+        // 初始化 Firebase 登入與建立資料庫監聽器
+        async function initFirebaseAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // 連結至 Firestore 資料庫路徑
+                const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                
+                // 設定即時監聽：只要有人上傳新成績，這裡就會自動更新
+                onSnapshot(leaderboardRef, (snapshot) => {
+                    let tempBoard = [];
+                    snapshot.forEach(doc => {
+                        tempBoard.push(doc.data());
+                    });
+                    
+                    // 在記憶體中進行時間排序，並只取前 10 名
+                    tempBoard.sort((a, b) => a.time - b.time);
+                    leaderboard = tempBoard.slice(0, 10);
+                    
+                    // 如果玩家剛好停留在排行榜畫面，則即時刷新畫面
+                    const lbScreen = document.getElementById('leaderboard-screen');
+                    if (lbScreen && !lbScreen.classList.contains('hidden')) {
+                        renderLeaderboard();
+                    }
+                }, (error) => {
+                    console.error("讀取排行榜失敗:", error);
+                });
+            } catch (e) {
+                console.error("Firebase 登入失敗:", e);
+            }
+        }
+        initFirebaseAuth();
+
+        let isPortrait = false;
+        let gridCenter = new THREE.Vector3();
+        let scatterCenter = new THREE.Vector3();
+        let dropZones = []; 
+        let scatterZones = []; 
+        let currentInteractionMode = 'drag';
+
+        // 備用機制：若 Google Drive 圖片抓取失敗時，顯示簡易文字
+        function createFallbackTextures() {
+            return SYMBOLS_INFO.map((info) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = info.bg;
+                ctx.fillRect(0, 0, 512, 512);
+
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = 'bold 40px Noto Sans TC, Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('載入圖片失敗', 256, 230);
+                ctx.fillText(`(${info.name})`, 256, 290);
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 10;
+                ctx.strokeRect(20, 20, 472, 472);
+                return canvas;
+            });
+        }
+
+        // 異步載入所有真實圖片
+        async function loadRealImages() {
+            const fallbacks = createFallbackTextures();
+            
+            for (let i = 0; i < 6; i++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
+                const ctx = canvas.getContext('2d');
+                
+                try {
+                    await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = "Anonymous"; // 必須加上這個，否則 WebGL 會報錯
+                        img.onload = () => {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, 512, 512);
+                            ctx.drawImage(img, 0, 0, 512, 512);
+                            resolve();
+                        };
+                        img.onerror = () => reject(new Error('Image Load Failed'));
+                        img.src = IMAGE_FILES[i];
+                    });
+                } catch (e) {
+                    console.warn(`讀取遠端圖片失敗，已套用備用圖案 (索引: ${i})`, e);
+                    ctx.drawImage(fallbacks[i], 0, 0);
+                }
+                fullCanvases.push(canvas);
+            }
+
+            initGameEngine();
+        }
+
+        window.onload = () => {
+            loadRealImages();
+        };
+
+        window.addEventListener('contextmenu', e => e.preventDefault());
+
+        window.setMode = function(mode) {
+            currentInteractionMode = mode;
+            const btnDrag = document.getElementById('mode-drag');
+            const btnRotate = document.getElementById('mode-rotate');
+            
+            if(mode === 'drag') {
+                btnDrag.className = "px-5 py-2.5 rounded-xl bg-emerald-500 text-white font-bold shadow-md transition-all flex items-center gap-2 text-lg";
+                btnRotate.className = "px-5 py-2.5 rounded-xl bg-transparent text-slate-600 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 text-lg";
+            } else {
+                btnRotate.className = "px-5 py-2.5 rounded-xl bg-blue-500 text-white font-bold shadow-md transition-all flex items-center gap-2 text-lg";
+                btnDrag.className = "px-5 py-2.5 rounded-xl bg-transparent text-slate-600 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 text-lg";
+            }
+        };
+
+        function initSelectScreen() {
+            const container = document.getElementById('puzzle-options');
+            container.innerHTML = '';
+            SYMBOLS_INFO.forEach((info, index) => {
+                const btn = document.createElement('button');
+                btn.className = "flex flex-col items-center justify-center p-3 sm:p-4 bg-white/70 backdrop-blur-md rounded-2xl border-2 border-slate-200 hover:border-emerald-500 hover:shadow-lg transition-all active:scale-95 group";
+                btn.onclick = () => startGame(index);
+                
+                const img = document.createElement('img');
+                img.src = fullCanvases[index].toDataURL();
+                img.className = "w-16 h-16 sm:w-24 sm:h-24 object-contain mb-2 sm:mb-3 drop-shadow-sm group-hover:scale-110 transition-transform bg-white rounded-lg p-1";
+                
+                const span = document.createElement('span');
+                span.className = "font-bold text-slate-700 text-xs sm:text-base";
+                span.innerText = info.name;
+                
+                btn.appendChild(img);
+                btn.appendChild(span);
+                container.appendChild(btn);
+            });
+        }
+
+        // 九宮格圖片切割器
+        function getTextureSlice(fullCanvas, pieceIndex) {
+            const sliceCanvas = document.createElement('canvas');
+            const sourceSize = 512 / 3;
+            sliceCanvas.width = 256;
+            sliceCanvas.height = 256;
+            const ctx = sliceCanvas.getContext('2d');
+
+            const col = pieceIndex % 3;
+            const row = Math.floor(pieceIndex / 3);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.drawImage(
+                fullCanvas,
+                col * sourceSize, row * sourceSize, sourceSize, sourceSize,
+                2, 2, 252, 252 // 邊緣保留微微2像素間隙防止接縫
+            );
+
+            const texture = new THREE.CanvasTexture(sliceCanvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            return texture;
+        }
+
+        let scene, camera, renderer, cubes = [], dropZoneMeshes = [], scatterZoneMeshes = [];
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); 
+        let draggedCube = null, selectedCube = null; 
+        let dragOffset = new THREE.Vector3();
+        let lastMouse = { x: 0, y: 0 };
+        const CUBE_SIZE = 1;
+        const GAP = 1.05;
+
+        function initGameEngine() {
+            initSelectScreen();
+
+            const container = document.getElementById('game-canvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#f8fafc'); 
+
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+
+            const dropZoneGeo = new THREE.PlaneGeometry(CUBE_SIZE, CUBE_SIZE);
+            const dropZoneMat = new THREE.MeshBasicMaterial({ color: '#cbd5e1', transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+            const scatterZoneMat = new THREE.MeshBasicMaterial({ color: '#e2e8f0', transparent: true, opacity: 0.1, side: THREE.DoubleSide });
+            
+            for (let i = 0; i < 9; i++) {
+                const dMesh = new THREE.Mesh(dropZoneGeo, dropZoneMat);
+                scene.add(dMesh);
+                dropZoneMeshes.push(dMesh);
+                
+                const sMesh = new THREE.Mesh(dropZoneGeo, scatterZoneMat);
+                scene.add(sMesh);
+                scatterZoneMeshes.push(sMesh);
+            }
+
+            const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+            for (let i = 0; i < 9; i++) {
+                // 六個面綁定六張圖片切割好的紋理
+                const materials = [
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[4], i), roughness: 0.3 }), // 4: 一級能源
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[5], i), roughness: 0.3 }), // 5: 省水
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[2], i), roughness: 0.3 }), // 2: 節能
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[3], i), roughness: 0.3 }), // 3: 碳足跡
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[0], i), roughness: 0.3 }), // 0: 環保
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[1], i), roughness: 0.3 })  // 1: 回收
+                ];
+
+                const cube = new THREE.Mesh(geometry, materials);
+                cube.userData = {
+                    pieceIndex: i,         
+                    currentSlot: -1,       
+                    targetPos: new THREE.Vector3(),
+                    targetQuat: new THREE.Quaternion(),
+                    isDragging: false,
+                    isRotating: false
+                };
+                cubes.push(cube);
+                scene.add(cube);
+            }
+
+            updateLayout();
+
+            window.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('mouseup', onPointerUp);
+            window.addEventListener('touchstart', onPointerDown, { passive: false });
+            window.addEventListener('touchmove', onPointerMove, { passive: false });
+            window.addEventListener('touchend', onPointerUp);
+            window.addEventListener('resize', onWindowResize);
+
+            document.getElementById('loading-screen').classList.add('hidden');
+            showScreen('start-screen');
+            animate();
+        }
+
+        function updateLayout() {
+            const aspect = window.innerWidth / window.innerHeight;
+            isPortrait = aspect < 1;
+
+            if (isPortrait) {
+                camera.position.set(0, 0, 20);
+                gridCenter.set(0, -4.0, 0); 
+                scatterCenter.set(0, 4.0, 0); 
+            } else {
+                camera.position.set(0, 0, 13);
+                gridCenter.set(3.5, 0, 0); 
+                scatterCenter.set(-3.5, 0, 0); 
+            }
+
+            dropZones = [];
+            scatterZones = [];
+            for (let i = 0; i < 9; i++) {
+                const col = i % 3; const row = Math.floor(i / 3);
+                
+                const dx = gridCenter.x + (col - 1) * GAP;
+                const dy = gridCenter.y - (row - 1) * GAP;
+                if (dropZoneMeshes[i]) dropZoneMeshes[i].position.set(dx, dy, -0.5);
+                dropZones.push(new THREE.Vector3(dx, dy, 0));
+
+                const sx = scatterCenter.x + (col - 1) * GAP;
+                const sy = scatterCenter.y - (row - 1) * GAP;
+                if (scatterZoneMeshes[i]) scatterZoneMeshes[i].position.set(sx, sy, -0.5);
+                scatterZones.push(new THREE.Vector3(sx, sy, 0));
+            }
+        }
+
+        function getIntersects(event) {
+            let clientX = event.changedTouches ? event.changedTouches[0].clientX : event.clientX;
+            let clientY = event.changedTouches ? event.changedTouches[0].clientY : event.clientY;
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            return raycaster.intersectObjects(cubes);
+        }
+
+        function snapQuaternion(q) {
+            let right = new THREE.Vector3(1,0,0).applyQuaternion(q);
+            let up = new THREE.Vector3(0,1,0).applyQuaternion(q);
+            
+            const axes = [
+                new THREE.Vector3(1,0,0), new THREE.Vector3(-1,0,0),
+                new THREE.Vector3(0,1,0), new THREE.Vector3(0,-1,0),
+                new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-1)
+            ];
+            
+            let bestRight = axes[0], maxDotRight = -Infinity;
+            for(let a of axes) {
+                let d = right.dot(a);
+                if(d > maxDotRight) { maxDotRight = d; bestRight = a; }
+            }
+            
+            let bestUp = axes[0], maxDotUp = -Infinity;
+            for(let a of axes) {
+                if(a.dot(bestRight) === 0) { 
+                    let d = up.dot(a);
+                    if(d > maxDotUp) { maxDotUp = d; bestUp = a; }
+                }
+            }
+            
+            let bestForward = new THREE.Vector3().crossVectors(bestRight, bestUp);
+            let mat = new THREE.Matrix4().makeBasis(bestRight, bestUp, bestForward);
+            return new THREE.Quaternion().setFromRotationMatrix(mat);
+        }
+
+        function onPointerDown(event) {
+            if (!isPlaying || isAnimating) return;
+            if (event.target.closest('#rotate-tool') || event.target.closest('#mode-toggle-container') || event.target.closest('#hud')) return; 
+            
+            const isRightClick = (event.button === 2) || (event.touches && event.touches.length >= 2) || (currentInteractionMode === 'rotate');
+            const intersects = getIntersects(event);
+
+            if (selectedCube && (!intersects.length || intersects[0].object !== selectedCube)) {
+                selectedCube.material.forEach(mat => mat.emissive.setHex(0x000000));
+                selectedCube = null;
+            }
+
+            if (intersects.length > 0) {
+                draggedCube = intersects[0].object;
+                selectedCube = draggedCube;
+                draggedCube.material.forEach(mat => mat.emissive.setHex(0x222222));
+
+                if (isRightClick) {
+                    draggedCube.userData.isRotating = true;
+                    lastMouse.x = event.clientX || (event.touches ? event.touches[0].clientX : 0);
+                    lastMouse.y = event.clientY || (event.touches ? event.touches[0].clientY : 0);
+                } else {
+                    draggedCube.userData.isDragging = true;
+                    raycaster.ray.intersectPlane(dragPlane, dragOffset);
+                    dragOffset.sub(draggedCube.position);
+                    draggedCube.position.z = 0.5; 
+                    draggedCube.userData.currentSlot = -1; 
+                }
+            }
+        }
+
+        function onPointerMove(event) {
+            if (!draggedCube) return;
+            
+            let clientX = event.changedTouches ? event.changedTouches[0].clientX : event.clientX;
+            let clientY = event.changedTouches ? event.changedTouches[0].clientY : event.clientY;
+            
+            if (draggedCube.userData.isRotating) {
+                let deltaX = clientX - lastMouse.x;
+                let deltaY = clientY - lastMouse.y;
+                lastMouse.x = clientX;
+                lastMouse.y = clientY;
+
+                let qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX * 0.01);
+                let qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY * 0.01);
+                draggedCube.userData.targetQuat.premultiply(qY).premultiply(qX).normalize();
+            } else if (draggedCube.userData.isDragging) {
+                const intersectPoint = new THREE.Vector3();
+                mouse.x = (clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                
+                if (raycaster.ray.intersectPlane(dragPlane, intersectPoint)) {
+                    const newPos = intersectPoint.sub(dragOffset);
+                    const limitX = isPortrait ? 6 : 12;
+                    const limitY = isPortrait ? 10 : 6;
+                    newPos.x = Math.max(-limitX, Math.min(limitX, newPos.x));
+                    newPos.y = Math.max(-limitY, Math.min(limitY, newPos.y));
+
+                    draggedCube.position.set(newPos.x, newPos.y, 0.5); 
+                    draggedCube.userData.targetPos.copy(draggedCube.position);
+                }
+            }
+        }
+
+        function onPointerUp(event) {
+            if (!draggedCube) return;
+            
+            if (draggedCube.userData.isRotating) {
+                draggedCube.userData.isRotating = false;
+                draggedCube.userData.targetQuat = snapQuaternion(draggedCube.userData.targetQuat);
+            } 
+            else if (draggedCube.userData.isDragging) {
+                draggedCube.userData.isDragging = false;
+                
+                let closestSlot = -1, minDistance = 1.0; 
+                for (let i = 0; i < 9; i++) {
+                    const dist = Math.hypot(draggedCube.position.x - dropZones[i].x, draggedCube.position.y - dropZones[i].y);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestSlot = i;
+                    }
+                }
+
+                if (closestSlot !== -1) {
+                    const occupant = cubes.find(c => c !== draggedCube && c.userData.currentSlot === closestSlot);
+                    if (occupant) {
+                        occupant.userData.currentSlot = -1;
+                        scatterCube(occupant); 
+                    }
+                    draggedCube.userData.currentSlot = closestSlot;
+                    draggedCube.userData.targetPos.copy(dropZones[closestSlot]);
+                } else {
+                    draggedCube.userData.currentSlot = -1;
+                    draggedCube.userData.targetPos.z = 0;
+                }
+            }
+
+            draggedCube = null;
+            setTimeout(checkWinCondition, 300);
+        }
+
+        window.rotateSelectedZ = function(e) {
+            e.stopPropagation();
+            if (!selectedCube) return;
+            const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+            selectedCube.userData.targetQuat.premultiply(q).normalize();
+            setTimeout(checkWinCondition, 300);
+        };
+
+        function scatterCube(cube) {
+            const occupiedScatterZones = cubes
+                .filter(c => c !== cube && c.userData.currentSlot === -1)
+                .map(c => c.userData.targetPos);
+            
+            let availableZones = scatterZones.filter(sz => !occupiedScatterZones.some(pos => pos.distanceTo(sz) < 0.5));
+
+            if (availableZones.length > 0) {
+                cube.userData.targetPos.copy(availableZones[Math.floor(Math.random() * availableZones.length)]);
+            } else {
+                const fallback = scatterZones[Math.floor(Math.random() * scatterZones.length)].clone();
+                fallback.x += (Math.random() - 0.5) * 0.5;
+                fallback.y += (Math.random() - 0.5) * 0.5;
+                cube.userData.targetPos.copy(fallback);
+            }
+        }
+
+        window.startGame = function(symbolIndex) {
+            if (symbolIndex === -1) {
+                targetGameSymbol = Math.floor(Math.random() * 6);
+            } else {
+                targetGameSymbol = symbolIndex;
+            }
+
+            document.getElementById('hud-target-img').src = fullCanvases[targetGameSymbol].toDataURL();
+            document.getElementById('hud-target-name').innerText = SYMBOLS_INFO[targetGameSymbol].name;
+
+            showScreen('game');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('mode-toggle-container').classList.remove('hidden'); 
+            
+            updateLayout();
+
+            // 將所有方塊整齊打散在九宮格散落區內
+            let scatterIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+            for (let i = scatterIndices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [scatterIndices[i], scatterIndices[j]] = [scatterIndices[j], scatterIndices[i]];
+            }
+
+            cubes.forEach((cube, index) => {
+                cube.userData.currentSlot = -1;
+                cube.userData.targetPos.copy(scatterZones[scatterIndices[index]]);
+                cube.userData.targetQuat.identity();
+                
+                const rotations = Math.floor(Math.random() * 4) + 1;
+                for (let r = 0; r < rotations; r++) {
+                    const q = new THREE.Quaternion();
+                    const axes = [new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)];
+                    q.setFromAxisAngle(axes[Math.floor(Math.random()*3)], Math.PI/2);
+                    cube.userData.targetQuat.multiply(q);
+                }
+                
+                cube.position.copy(cube.userData.targetPos);
+                cube.quaternion.copy(cube.userData.targetQuat);
+            });
+
+            startTimer();
+            isPlaying = true;
+            selectedCube = null;
+        }
+
+        function checkWinCondition() {
+            if (!isPlaying) return;
+
+            const slots = [];
+            for (let i = 0; i < 9; i++) {
+                const cube = cubes.find(c => c.userData.currentSlot === i);
+                if (!cube) return; 
+                slots.push(cube);
+            }
+
+            const faceData = [
+                { id: 0, dir: [1,0,0], up: [0,1,0] },   
+                { id: 1, dir: [-1,0,0], up: [0,1,0] },  
+                { id: 2, dir: [0,1,0], up: [0,0,-1] },  
+                { id: 3, dir: [0,-1,0], up: [0,0,1] },  
+                { id: 4, dir: [0,0,1], up: [0,1,0] },   
+                { id: 5, dir: [0,0,-1], up: [0,1,0] }   
+            ];
+
+            let targetSymbolId = -1;
+            let localRots = []; 
+
+            for (let i = 0; i < 9; i++) {
+                const cube = slots[i];
+                let currentFrontId = -1, currentUp = null;
+
+                for (let f = 0; f < 6; f++) {
+                    const normal = new THREE.Vector3(...faceData[f].dir).applyQuaternion(cube.userData.targetQuat);
+                    if (normal.z > 0.9) { 
+                        currentFrontId = f;
+                        currentUp = new THREE.Vector3(...faceData[f].up).applyQuaternion(cube.userData.targetQuat);
+                        break;
+                    }
+                }
+
+                if (currentFrontId === -1) return; 
+
+                if (i === 0) targetSymbolId = currentFrontId;
+                else if (currentFrontId !== targetSymbolId) return; 
+
+                let localRot = -1; 
+                if (currentUp.y > 0.9) localRot = 0;
+                else if (currentUp.x > 0.9) localRot = 1;  
+                else if (currentUp.y < -0.9) localRot = 2; 
+                else if (currentUp.x < -0.9) localRot = 3; 
+
+                if (localRot === -1) return;
+                localRots.push(localRot);
+            }
+
+            const mapFaceToSymbol = { 4: 0, 5: 1, 2: 2, 3: 3, 0: 4, 1: 5 };
+            const symbolIndex = mapFaceToSymbol[targetSymbolId];
+
+            if (symbolIndex !== targetGameSymbol) return;
+
+            let isCorrect = true;
+
+            // 回收標章(1)具有完全旋轉對稱性
+            if (symbolIndex === 1) { 
+                const map90CW = {6:0, 3:1, 0:2, 7:3, 4:4, 1:5, 8:6, 5:7, 2:8};
+                for (let i = 0; i < 9; i++) {
+                    let visualId = slots[i].userData.pieceIndex;
+                    for(let r = 0; r < localRots[i]; r++) visualId = map90CW[visualId];
+                    if (visualId !== i) { isCorrect = false; break; }
+                }
+            } else { 
+                for (let i = 0; i < 9; i++) {
+                    if (slots[i].userData.pieceIndex !== i || localRots[i] !== 0) {
+                        isCorrect = false; break;
+                    }
+                }
+            }
+
+            if (!isCorrect) return;
+
+            isPlaying = false;
+            stopTimer();
+            selectedCube = null;
+            
+            setTimeout(() => {
+                document.getElementById('win-symbol-name').textContent = SYMBOLS_INFO[symbolIndex].name;
+                document.getElementById('win-time').textContent = formatTime(finalTimeMs);
+                document.getElementById('hud').classList.add('hidden');
+                document.getElementById('mode-toggle-container').classList.add('hidden');
+                document.getElementById('rotate-tool').classList.add('hidden');
+                showScreen('win-screen');
+            }, 500);
+        }
+
+        window.showScreen = function(screenId) {
+            ['start-screen', 'win-screen', 'leaderboard-screen', 'select-screen'].forEach(id => {
+                document.getElementById(id)?.classList.add('hidden', 'opacity-0', 'scale-95');
+            });
+            document.getElementById('rotate-tool')?.classList.add('hidden');
+            
+            if (screenId === 'start-screen' || screenId === 'select-screen') {
+                document.getElementById('hud')?.classList.add('hidden');
+                document.getElementById('mode-toggle-container')?.classList.add('hidden');
+                isPlaying = false;
+                stopTimer();
+                selectedCube = null;
+                setMode('drag');
+                
+                cubes.forEach((cube, i) => {
+                    const col = i % 3; const row = Math.floor(i / 3);
+                    cube.userData.targetPos.set((col - 1) * GAP, -(row - 1) * GAP, 0);
+                    cube.userData.targetQuat.identity();
+                    cube.userData.currentSlot = -1;
+                    cube.material.forEach(mat => mat.emissive.setHex(0x000000));
+                });
+            }
+
+            setTimeout(() => {
+                const screen = document.getElementById(screenId);
+                if (screen) {
+                    screen.classList.remove('hidden');
+                    void screen.offsetWidth;
+                    screen.classList.remove('opacity-0', 'scale-95');
+                }
+                if (screenId === 'leaderboard-screen') renderLeaderboard();
+            }, 50);
+        };
+
+        function startTimer() {
+            startTime = Date.now();
+            updateTimerUI(0);
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => updateTimerUI(Date.now() - startTime), 100);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            if (startTime > 0) {
+                finalTimeMs = Date.now() - startTime;
+                startTime = 0;
+            }
+        }
+
+        function updateTimerUI(ms) {
+            document.getElementById('timer').textContent = formatTime(ms);
+        }
+
+        function formatTime(ms) {
+            const m = Math.floor(ms / 60000).toString().padStart(2, '0');
+            const s = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0');
+            const ms1 = Math.floor((ms % 1000) / 100);
+            return `${m}:${s}.${ms1}`;
+        }
+
+        window.submitScore = async function() {
+            let name = document.getElementById('player-name').value.trim() || "環保小尖兵";
+            const symbol = document.getElementById('win-symbol-name').textContent;
+            
+            // 讓按鈕顯示上傳中，防止玩家連點
+            const submitBtn = document.querySelector('#win-screen button');
+            const originalText = submitBtn.innerText;
+            submitBtn.innerText = "上傳成績中...";
+            submitBtn.disabled = true;
+
+            // 確保有登入才上傳
+            if (auth.currentUser) {
+                try {
+                    const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                    await addDoc(leaderboardRef, {
+                        name: name,
+                        time: finalTimeMs,
+                        symbol: symbol,
+                        timestamp: Date.now()
+                    });
+                } catch (error) {
+                    console.error("成績上傳失敗:", error);
+                }
+            }
+
+            // 恢復按鈕狀態並切換畫面
+            submitBtn.innerText = originalText;
+            submitBtn.disabled = false;
+            document.getElementById('player-name').value = '';
+            showScreen('leaderboard-screen');
+        };
+
+        function renderLeaderboard() {
+            const tbody = document.getElementById('leaderboard-body');
+            const emptyMsg = document.getElementById('empty-leaderboard');
+            tbody.innerHTML = '';
+            
+            if (leaderboard.length === 0) {
+                emptyMsg.classList.remove('hidden');
+            } else {
+                emptyMsg.classList.add('hidden');
+                leaderboard.forEach((entry, i) => {
+                    let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span class="text-slate-400 pl-2">${i + 1}</span>`;
+                    tbody.innerHTML += `
+                        <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                            <td class="py-3 pl-2 text-xl">${medal}</td>
+                            <td class="py-3 font-bold text-slate-700">${entry.name}</td>
+                            <td class="py-3 text-sm text-slate-500 hidden sm:table-cell">${entry.symbol}</td>
+                            <td class="py-3 text-right pr-2 font-mono font-bold text-emerald-600">${formatTime(entry.time)}</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            cubes.forEach(cube => {
+                if (!cube.userData.isDragging) {
+                    cube.position.lerp(cube.userData.targetPos, 15 * delta);
+                }
+                
+                if (!cube.userData.isRotating) {
+                    cube.quaternion.slerp(cube.userData.targetQuat, 15 * delta);
+                } else {
+                    cube.quaternion.copy(cube.userData.targetQuat);
+                }
+            });
+
+            const rotateTool = document.getElementById('rotate-tool');
+            if (isPlaying && selectedCube && !selectedCube.userData.isDragging && !selectedCube.userData.isRotating) {
+                const pos = selectedCube.position.clone();
+                pos.project(camera);
+                const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (pos.y * -0.5 + 0.5) * window.innerHeight;
+                
+                rotateTool.style.left = `${x + 50}px`;
+                rotateTool.style.top = `${y - 50}px`;
+                rotateTool.classList.remove('hidden');
+            } else {
+                rotateTool.classList.add('hidden');
+            }
+
+            if (!isPlaying && !draggedCube) {
+                const time = Date.now() * 0.001;
+                scene.rotation.y = Math.sin(time * 0.2) * 0.1;
+                scene.rotation.x = Math.cos(time * 0.3) * 0.05;
+            } else {
+                scene.rotation.y = THREE.MathUtils.lerp(scene.rotation.y, 0, 0.1);
+                scene.rotation.x = THREE.MathUtils.lerp(scene.rotation.x, 0, 0.1);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            updateLayout();
+        }
+
+    </script>
+</body>
+</html>
