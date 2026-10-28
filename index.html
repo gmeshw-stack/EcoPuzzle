@@ -107,8 +107,8 @@
             <!-- Loading 畫面 -->
             <div id="loading-screen" class="interactive glass-panel p-8 rounded-3xl max-w-sm w-full text-center">
                 <div class="text-4xl mb-4 animate-spin">⏳</div>
-                <h2 class="text-2xl font-bold text-slate-800">正在讀取圖片...</h2>
-                <p class="text-slate-500 text-sm mt-2">從伺服器載入中...</p>
+                <h2 class="text-2xl font-bold text-slate-800">正在尋找圖片...</h2>
+                <p class="text-slate-500 text-sm mt-2">智慧掃描 GitHub 檔案中...</p>
             </div>
 
             <!-- 開始畫面 -->
@@ -207,16 +207,14 @@
         </div>
     </div>
 
+    <!-- 載入 Firebase 與你的資料庫設定 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase 基礎設定與初始化
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ecopuzzle';
-        
-        // 請確保這裡的 firebaseConfig 是你自己的設定檔
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        // 這是你的專屬資料庫配置！
+        const firebaseConfig = {
             apiKey: "AIzaSyAEIxp0FWZH5HxBkjKke70e3K3PpX3Qaw0",
             authDomain: "ecopuzzle-41e41.firebaseapp.com",
             projectId: "ecopuzzle-41e41",
@@ -238,15 +236,15 @@
             { name: '省水標章', bg: '#ffffff' }  
         ];
 
-        // 🛑 注意這裡！已經改為讀取本地 images 資料夾內的圖片檔案
-        // 請務必確認 GitHub 上你的圖片檔名與這裡「完全一致」（包含大小寫）
-        const IMAGE_FILES = [
-            'images/eco.png',     // 0: 環保標章
-            'images/recycle.png', // 1: 回收標章
-            'images/energy.png',  // 2: 節能標章
-            'images/carbon.png',  // 3: 碳足跡標章
-            'images/level1.png',  // 4: 一級能源效率標章
-            'images/water.png'    // 5: 省水標章
+        // 🔥 智慧型圖片路徑偵測系統 🔥
+        // 會自動依序嘗試所有可能的資料夾結構、中英文檔名、甚至 .png.png 隱藏副檔名錯誤
+        const IMAGE_PATHS_TO_TRY = [
+            ['images/eco.png', 'eco.png', 'images/eco.png.png', 'images/環保標章.png', '環保標章.png', 'eco.PNG', 'images/eco.PNG'],
+            ['images/recycle.png', 'recycle.png', 'images/recycle.png.png', 'images/回收標章.png', '回收標章.png', 'recycle.PNG', 'images/recycle.PNG'],
+            ['images/energy.png', 'energy.png', 'images/energy.png.png', 'images/節能標章.png', '節能標章.png', 'images/圖片_2.png', '圖片_2.png'],
+            ['images/carbon.png', 'carbon.png', 'images/carbon.png.png', 'images/碳足跡標章.png', '碳足跡標章.png', 'images/圖片.png', '圖片.png'],
+            ['images/level1.png', 'level1.png', 'images/level1.png.png', 'images/一級能源標章.png', '一級能源效率標章.png', '一級能源標章.png', '一級能源效率標章.png'],
+            ['images/water.png', 'water.png', 'images/water.png.png', 'images/省水標章.png', '省水標章.png', 'water.PNG', 'images/water.PNG']
         ];
 
         let fullCanvases = []; 
@@ -260,20 +258,12 @@
 
         async function initFirebaseAuth() {
             try {
-                if (typeof __initial_auth_token !== 'undefined') {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                
-                const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                await signInAnonymously(auth);
+                const leaderboardRef = collection(db, 'leaderboard');
                 
                 onSnapshot(leaderboardRef, (snapshot) => {
                     let tempBoard = [];
-                    snapshot.forEach(doc => {
-                        tempBoard.push(doc.data());
-                    });
-                    
+                    snapshot.forEach(doc => tempBoard.push(doc.data()));
                     tempBoard.sort((a, b) => a.time - b.time);
                     leaderboard = tempBoard.slice(0, 10);
                     
@@ -281,11 +271,9 @@
                     if (lbScreen && !lbScreen.classList.contains('hidden')) {
                         renderLeaderboard();
                     }
-                }, (error) => {
-                    console.error("讀取排行榜失敗:", error);
                 });
             } catch (e) {
-                console.error("Firebase 登入失敗:", e);
+                console.error("Firebase 連線失敗:", e);
             }
         }
         initFirebaseAuth();
@@ -327,23 +315,36 @@
                 canvas.height = 512;
                 const ctx = canvas.getContext('2d');
                 
-                try {
-                    await new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.crossOrigin = "Anonymous"; 
-                        img.onload = () => {
-                            ctx.fillStyle = '#ffffff';
-                            ctx.fillRect(0, 0, 512, 512);
-                            ctx.drawImage(img, 0, 0, 512, 512);
-                            resolve();
-                        };
-                        img.onerror = () => reject(new Error('Image Load Failed'));
-                        img.src = IMAGE_FILES[i];
-                    });
-                } catch (e) {
-                    console.warn(`讀取本地圖片失敗，已套用備用圖案 (索引: ${i})`, e);
+                let isLoaded = false;
+                
+                // 依序嘗試我們設定的各種可能路徑
+                for (let path of IMAGE_PATHS_TO_TRY[i]) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const img = new Image();
+                            img.crossOrigin = "Anonymous"; 
+                            img.onload = () => {
+                                ctx.fillStyle = '#ffffff';
+                                ctx.fillRect(0, 0, 512, 512);
+                                ctx.drawImage(img, 0, 0, 512, 512);
+                                isLoaded = true;
+                                resolve();
+                            };
+                            img.onerror = () => reject();
+                            img.src = path;
+                        });
+                        console.log(`成功載入: ${path}`);
+                        break; // 只要有一個路徑成功，就跳出迴圈
+                    } catch (e) {
+                        // 失敗了，繼續嘗試陣列中的下一個路徑
+                    }
+                }
+
+                if (!isLoaded) {
+                    console.warn(`所有可能路徑都讀取失敗，已套用備用圖案 (索引: ${i})`);
                     ctx.drawImage(fallbacks[i], 0, 0);
                 }
+                
                 fullCanvases.push(canvas);
             }
 
@@ -896,7 +897,7 @@
 
             if (auth.currentUser) {
                 try {
-                    const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                    const leaderboardRef = collection(db, 'leaderboard');
                     await addDoc(leaderboardRef, {
                         name: name,
                         time: finalTimeMs,
