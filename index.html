@@ -108,7 +108,7 @@
             <div id="loading-screen" class="interactive glass-panel p-8 rounded-3xl max-w-sm w-full text-center">
                 <div class="text-4xl mb-4 animate-spin">⏳</div>
                 <h2 class="text-2xl font-bold text-slate-800">正在讀取圖片...</h2>
-                <p class="text-slate-500 text-sm mt-2">從 Google Drive 載入中...</p>
+                <p class="text-slate-500 text-sm mt-2">從伺服器載入中...</p>
             </div>
 
             <!-- 開始畫面 -->
@@ -214,6 +214,8 @@
 
         // Firebase 基礎設定與初始化
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'ecopuzzle';
+        
+        // 請確保這裡的 firebaseConfig 是你自己的設定檔
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyAEIxp0FWZH5HxBkjKke70e3K3PpX3Qaw0",
             authDomain: "ecopuzzle-41e41.firebaseapp.com",
@@ -236,14 +238,15 @@
             { name: '省水標章', bg: '#ffffff' }  
         ];
 
-        // 使用 CorsProxy 來讓 Google Drive 圖片可以直接在 WebGL 環境中載入
+        // 🛑 注意這裡！已經改為讀取本地 images 資料夾內的圖片檔案
+        // 請務必確認 GitHub 上你的圖片檔名與這裡「完全一致」（包含大小寫）
         const IMAGE_FILES = [
-            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=16SuarGGRJbNu3P6o6fzOmG6Zeb0B7eA_'), // 0: 環保標章
-            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=15jMIEpqiAVU_T_zza2XzOK5S0o_zhLHL'), // 1: 回收標章
-            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=1okoxb9LmF4ctSoqniZc8Sa5vQmtu7iSu'), // 2: 節能標章
-            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=19pg38_7opuWROc8Y54QbjSxkn-Jcmvuy'), // 3: 碳足跡標章
-            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=1EkC8ej3MPaeqaOpffCYGVongSw7_tuSq'), // 4: 一級能源效率標章
-            'https://corsproxy.io/?' + encodeURIComponent('https://drive.google.com/uc?export=download&id=1TGA0lWBRlBaORyIhm29CGyGYh5YhK5QH')  // 5: 省水標章
+            'images/eco.png',     // 0: 環保標章
+            'images/recycle.png', // 1: 回收標章
+            'images/energy.png',  // 2: 節能標章
+            'images/carbon.png',  // 3: 碳足跡標章
+            'images/level1.png',  // 4: 一級能源效率標章
+            'images/water.png'    // 5: 省水標章
         ];
 
         let fullCanvases = []; 
@@ -253,9 +256,8 @@
         let timerInterval;
         let finalTimeMs = 0;
         let targetGameSymbol = 0; 
-        let leaderboard = []; // 改為空陣列，資料將由 Firebase 即時載入
+        let leaderboard = []; 
 
-        // 初始化 Firebase 登入與建立資料庫監聽器
         async function initFirebaseAuth() {
             try {
                 if (typeof __initial_auth_token !== 'undefined') {
@@ -264,21 +266,17 @@
                     await signInAnonymously(auth);
                 }
                 
-                // 連結至 Firestore 資料庫路徑
                 const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
                 
-                // 設定即時監聽：只要有人上傳新成績，這裡就會自動更新
                 onSnapshot(leaderboardRef, (snapshot) => {
                     let tempBoard = [];
                     snapshot.forEach(doc => {
                         tempBoard.push(doc.data());
                     });
                     
-                    // 在記憶體中進行時間排序，並只取前 10 名
                     tempBoard.sort((a, b) => a.time - b.time);
                     leaderboard = tempBoard.slice(0, 10);
                     
-                    // 如果玩家剛好停留在排行榜畫面，則即時刷新畫面
                     const lbScreen = document.getElementById('leaderboard-screen');
                     if (lbScreen && !lbScreen.classList.contains('hidden')) {
                         renderLeaderboard();
@@ -299,7 +297,6 @@
         let scatterZones = []; 
         let currentInteractionMode = 'drag';
 
-        // 備用機制：若 Google Drive 圖片抓取失敗時，顯示簡易文字
         function createFallbackTextures() {
             return SYMBOLS_INFO.map((info) => {
                 const canvas = document.createElement('canvas');
@@ -321,7 +318,6 @@
             });
         }
 
-        // 異步載入所有真實圖片
         async function loadRealImages() {
             const fallbacks = createFallbackTextures();
             
@@ -334,7 +330,7 @@
                 try {
                     await new Promise((resolve, reject) => {
                         const img = new Image();
-                        img.crossOrigin = "Anonymous"; // 必須加上這個，否則 WebGL 會報錯
+                        img.crossOrigin = "Anonymous"; 
                         img.onload = () => {
                             ctx.fillStyle = '#ffffff';
                             ctx.fillRect(0, 0, 512, 512);
@@ -345,7 +341,7 @@
                         img.src = IMAGE_FILES[i];
                     });
                 } catch (e) {
-                    console.warn(`讀取遠端圖片失敗，已套用備用圖案 (索引: ${i})`, e);
+                    console.warn(`讀取本地圖片失敗，已套用備用圖案 (索引: ${i})`, e);
                     ctx.drawImage(fallbacks[i], 0, 0);
                 }
                 fullCanvases.push(canvas);
@@ -396,7 +392,6 @@
             });
         }
 
-        // 九宮格圖片切割器
         function getTextureSlice(fullCanvas, pieceIndex) {
             const sliceCanvas = document.createElement('canvas');
             const sourceSize = 512 / 3;
@@ -412,7 +407,7 @@
             ctx.drawImage(
                 fullCanvas,
                 col * sourceSize, row * sourceSize, sourceSize, sourceSize,
-                2, 2, 252, 252 // 邊緣保留微微2像素間隙防止接縫
+                2, 2, 252, 252
             );
 
             const texture = new THREE.CanvasTexture(sliceCanvas);
@@ -465,7 +460,6 @@
 
             const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
             for (let i = 0; i < 9; i++) {
-                // 六個面綁定六張圖片切割好的紋理
                 const materials = [
                     new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[4], i), roughness: 0.3 }), // 4: 一級能源
                     new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[5], i), roughness: 0.3 }), // 5: 省水
@@ -715,7 +709,6 @@
             
             updateLayout();
 
-            // 將所有方塊整齊打散在九宮格散落區內
             let scatterIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8];
             for (let i = scatterIndices.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -801,7 +794,6 @@
 
             let isCorrect = true;
 
-            // 回收標章(1)具有完全旋轉對稱性
             if (symbolIndex === 1) { 
                 const map90CW = {6:0, 3:1, 0:2, 7:3, 4:4, 1:5, 8:6, 5:7, 2:8};
                 for (let i = 0; i < 9; i++) {
@@ -897,13 +889,11 @@
             let name = document.getElementById('player-name').value.trim() || "環保小尖兵";
             const symbol = document.getElementById('win-symbol-name').textContent;
             
-            // 讓按鈕顯示上傳中，防止玩家連點
             const submitBtn = document.querySelector('#win-screen button');
             const originalText = submitBtn.innerText;
             submitBtn.innerText = "上傳成績中...";
             submitBtn.disabled = true;
 
-            // 確保有登入才上傳
             if (auth.currentUser) {
                 try {
                     const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
@@ -918,7 +908,6 @@
                 }
             }
 
-            // 恢復按鈕狀態並切換畫面
             submitBtn.innerText = originalText;
             submitBtn.disabled = false;
             document.getElementById('player-name').value = '';
