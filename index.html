@@ -310,7 +310,6 @@
                 try {
                     await new Promise((resolve, reject) => {
                         const img = new Image();
-                        // 加上時間戳防止快取
                         img.src = IMAGE_PATHS[i] + '?t=' + new Date().getTime(); 
                         img.crossOrigin = "Anonymous"; 
                         
@@ -318,15 +317,13 @@
                             ctx.fillStyle = '#ffffff';
                             ctx.fillRect(0, 0, 512, 512);
                             
-                            // 🚀 修改 1：稍微放大圖形 (1.05倍)，讓圖案更往角落延伸，減少全白機率
+                            // 稍微放大圖形 (1.05倍)，減少全白機率
                             const scale = (512 * 1.05) / Math.max(img.width, img.height);
                             const w = img.width * scale;
                             const h = img.height * scale;
                             const x = (512 - w) / 2;
                             const y = (512 - h) / 2;
                             ctx.drawImage(img, x, y, w, h);
-                            
-                            // 🚀 修改 2：完全移除數字浮水印跟灰色邊框，還你乾淨無縫的拼圖！
                             resolve();
                         };
                         img.onerror = () => reject();
@@ -397,7 +394,6 @@
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, 256, 256);
             
-            // 🚀 修改 3：移除切割線內縮，讓方塊呈現完美的無縫接合
             ctx.drawImage(
                 fullCanvas,
                 col * sourceSize, row * sourceSize, sourceSize, sourceSize,
@@ -417,7 +413,7 @@
         let dragOffset = new THREE.Vector3();
         let lastMouse = { x: 0, y: 0 };
         const CUBE_SIZE = 1;
-        const GAP = 1.0; // 緊密接合
+        const GAP = 1.0; 
 
         function initGameEngine() {
             initSelectScreen();
@@ -731,7 +727,7 @@
             selectedCube = null;
         }
 
-        // 🚀 修改 4：像素辨識系統 (Pixel Scanning) - 判定這塊切片是不是純白的
+        // 像素辨識系統 (Pixel Scanning) - 判定這塊切片是不是純白的
         const blankCache = {}; 
         function isSliceBlank(symbolIndex, pieceIndex) {
             const key = `${symbolIndex}-${pieceIndex}`;
@@ -758,20 +754,18 @@
             try {
                 const data = ctx.getImageData(0, 0, 64, 64).data;
                 for (let i = 0; i < data.length; i += 4) {
-                    // 如果掃描到非白色的像素 (表示上面有圖案)
                     if (data[i] < 245 || data[i+1] < 245 || data[i+2] < 245) {
                         blankCache[key] = false;
                         return false; 
                     }
                 }
             } catch(e) {
-                // 如果因為安全限制無法讀取，預設為 false (安全退回嚴格模式)
                 blankCache[key] = false; 
                 return false;
             }
             
             blankCache[key] = true;
-            return true; // 確定這是一塊全白的方塊
+            return true;
         }
 
         function checkWinCondition() {
@@ -780,7 +774,7 @@
             const slots = [];
             for (let i = 0; i < 9; i++) {
                 const cube = cubes.find(c => c.userData.currentSlot === i);
-                if (!cube) return; 
+                if (!cube) return; // 盤面上還沒擺滿 9 塊
             }
             
             for (let i = 0; i < 9; i++) {
@@ -796,13 +790,14 @@
                 { id: 5, dir: [0,0,-1], up: [0,1,0] }   
             ];
 
-            let targetSymbolId = -1;
-            let localRots = []; 
+            const mapFaceToSymbol = { 4: 0, 5: 1, 2: 2, 3: 3, 0: 4, 1: 5 };
+            let isCorrect = true;
 
             for (let i = 0; i < 9; i++) {
                 const cube = slots[i];
                 let currentFrontId = -1, currentUp = null;
 
+                // 找出目前這塊積木朝前的那一面，到底是哪一個面 (0~5)
                 for (let f = 0; f < 6; f++) {
                     const normal = new THREE.Vector3(...faceData[f].dir).applyQuaternion(cube.userData.targetQuat);
                     if (normal.z > 0.9) { 
@@ -812,63 +807,62 @@
                     }
                 }
 
-                if (currentFrontId === -1) return; 
+                if (currentFrontId === -1) { isCorrect = false; break; }
 
-                if (i === 0) targetSymbolId = currentFrontId;
-                else if (currentFrontId !== targetSymbolId) return; 
+                // 找出朝前的這一面，是屬於哪一個標章 (0~5)
+                const presentedSymbolIndex = mapFaceToSymbol[currentFrontId];
+                const pieceIndex = cube.userData.pieceIndex; // 這塊積木的原始編號
 
+                // 計算旋轉角度
                 let localRot = -1; 
                 if (currentUp.y > 0.9) localRot = 0;
                 else if (currentUp.x > 0.9) localRot = 1;  
                 else if (currentUp.y < -0.9) localRot = 2; 
                 else if (currentUp.x < -0.9) localRot = 3; 
 
-                if (localRot === -1) return;
-                localRots.push(localRot);
+                if (localRot === -1) { isCorrect = false; break; }
+
+                // 🌟 檢查條件 1: 完美吻合 (圖案是對的，位置是對的，角度也是對的)
+                let isPerfectMatch = false;
+                if (presentedSymbolIndex === targetGameSymbol) {
+                    if (targetGameSymbol === 1) { 
+                        // 回收標章的特殊對稱處理
+                        const map90CW = {6:0, 3:1, 0:2, 7:3, 4:4, 1:5, 8:6, 5:7, 2:8};
+                        let visualId = pieceIndex;
+                        for(let r = 0; r < localRot; r++) visualId = map90CW[visualId];
+                        if (visualId === i) isPerfectMatch = true;
+                    } else { 
+                        if (pieceIndex === i && localRot === 0) isPerfectMatch = true;
+                    }
+                }
+
+                if (isPerfectMatch) continue; // 這塊沒問題，檢查下一塊
+
+                // 🌟 檢查條件 2: 終極視覺白塊判定
+                // 1. 判斷目前的洞口位置 (slot i)，在目標圖案裡是不是本來就該是白色的
+                const isSlotBlank = isSliceBlank(targetGameSymbol, i);
+                
+                // 2. 判斷你塞進來的這個面 (presentedSymbolIndex 的 pieceIndex 面)，視覺上是不是白色的
+                const isPresentedBlank = isSliceBlank(presentedSymbolIndex, pieceIndex);
+
+                // 只要目標要白色，而你給的這面也是白色 (不管你轉幾度，不管你是拿哪個標章的背面)，通通算對！
+                if (isSlotBlank && isPresentedBlank) {
+                    continue; 
+                }
+
+                // 兩個條件都不符合，代表這塊拼錯了，結束檢查
+                isCorrect = false; 
+                break;
             }
 
-            const mapFaceToSymbol = { 4: 0, 5: 1, 2: 2, 3: 3, 0: 4, 1: 5 };
-            const symbolIndex = mapFaceToSymbol[targetSymbolId];
-
-            if (symbolIndex !== targetGameSymbol) return;
-
-            let isCorrect = true;
-
-            if (symbolIndex === 1) { 
-                const map90CW = {6:0, 3:1, 0:2, 7:3, 4:4, 1:5, 8:6, 5:7, 2:8};
-                for (let i = 0; i < 9; i++) {
-                    let visualId = slots[i].userData.pieceIndex;
-                    for(let r = 0; r < localRots[i]; r++) visualId = map90CW[visualId];
-                    if (visualId === i) continue;
-
-                    // 🚀 如果方塊放錯了，系統會寬容地檢查：「這是不是一塊可替換的白塊？」
-                    if (isSliceBlank(symbolIndex, i) && isSliceBlank(symbolIndex, slots[i].userData.pieceIndex)) {
-                        continue; // 這個洞本來就是白的，而你放進來的也是一塊白方塊，算你過關！
-                    }
-
-                    isCorrect = false; break;
-                }
-            } else { 
-                for (let i = 0; i < 9; i++) {
-                    if (slots[i].userData.pieceIndex === i && localRots[i] === 0) continue;
-
-                    // 🚀 如果方塊放錯了，系統會寬容地檢查：「這是不是一塊可替換的白塊？」
-                    if (isSliceBlank(symbolIndex, i) && isSliceBlank(symbolIndex, slots[i].userData.pieceIndex)) {
-                        continue; // 這個洞本來就是白的，而你放進來的也是一塊白方塊，算你過關！
-                    }
-
-                    isCorrect = false; break;
-                }
-            }
-
-            if (!isCorrect) return;
+            if (!isCorrect) return; // 判定失敗，繼續遊戲
 
             isPlaying = false;
             stopTimer();
             selectedCube = null;
             
             setTimeout(() => {
-                document.getElementById('win-symbol-name').textContent = SYMBOLS_INFO[symbolIndex].name;
+                document.getElementById('win-symbol-name').textContent = SYMBOLS_INFO[targetGameSymbol].name;
                 document.getElementById('win-time').textContent = formatTime(finalTimeMs);
                 document.getElementById('hud').classList.add('hidden');
                 document.getElementById('mode-toggle-container').classList.add('hidden');
