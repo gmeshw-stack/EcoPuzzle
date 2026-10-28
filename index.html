@@ -124,7 +124,7 @@
                         <li>左側是<b>散落區</b>，右側是<b>組合區</b>。</li>
                         <li><b>滑鼠左鍵拖曳</b>：移動方塊。</li>
                         <li><b>滑鼠右鍵拖曳</b>：自由翻轉方塊。</li>
-                        <li><b>注意外框線</b>：圖片最外圍有極淡的外框，可以幫助你辨認全白方塊的方向！</li>
+                        <li>提示：可以利用方塊右下角的按鈕進行 90 度旋轉。</li>
                     </ul>
                 </div>
                 
@@ -234,7 +234,7 @@
             { name: '省水標章', bg: '#ffffff' }  
         ];
 
-        // 讀取你在 GitHub 上的圖片路徑
+        // 使用相對路徑讀取本機資料夾的圖片
         const IMAGE_PATHS = [
             'images/eco.png',
             'images/recycle.png',
@@ -290,7 +290,6 @@
                 const ctx = canvas.getContext('2d');
                 ctx.fillStyle = info.bg;
                 ctx.fillRect(0, 0, 512, 512);
-
                 ctx.fillStyle = '#cbd5e1';
                 ctx.font = 'bold 40px Noto Sans TC, Arial';
                 ctx.textAlign = 'center';
@@ -311,7 +310,7 @@
                 try {
                     await new Promise((resolve, reject) => {
                         const img = new Image();
-                        // 加上時間戳記防止瀏覽器快取讀不到新圖
+                        // 加上時間戳防止快取
                         img.src = IMAGE_PATHS[i] + '?t=' + new Date().getTime(); 
                         img.crossOrigin = "Anonymous"; 
                         
@@ -319,17 +318,15 @@
                             ctx.fillStyle = '#ffffff';
                             ctx.fillRect(0, 0, 512, 512);
                             
-                            // 圖片置中縮放
-                            const scale = Math.min(512 / img.width, 512 / img.height);
-                            const x = (512 - img.width * scale) / 2;
-                            const y = (512 - img.height * scale) / 2;
-                            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                            // 🚀 修改 1：稍微放大圖形 (1.05倍)，讓圖案更往角落延伸，減少全白機率
+                            const scale = (512 * 1.05) / Math.max(img.width, img.height);
+                            const w = img.width * scale;
+                            const h = img.height * scale;
+                            const x = (512 - w) / 2;
+                            const y = (512 - h) / 2;
+                            ctx.drawImage(img, x, y, w, h);
                             
-                            // 🔥 防呆系統：畫上淡淡的外框，解決全白方塊陷阱！
-                            ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)'; // 極淡的黑線
-                            ctx.lineWidth = 12; // 邊框厚度
-                            ctx.strokeRect(6, 6, 500, 500);
-
+                            // 🚀 修改 2：完全移除數字浮水印跟灰色邊框，還你乾淨無縫的拼圖！
                             resolve();
                         };
                         img.onerror = () => reject();
@@ -399,10 +396,12 @@
 
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, 256, 256);
+            
+            // 🚀 修改 3：移除切割線內縮，讓方塊呈現完美的無縫接合
             ctx.drawImage(
                 fullCanvas,
                 col * sourceSize, row * sourceSize, sourceSize, sourceSize,
-                2, 2, 252, 252
+                0, 0, 256, 256
             );
 
             const texture = new THREE.CanvasTexture(sliceCanvas);
@@ -418,7 +417,7 @@
         let dragOffset = new THREE.Vector3();
         let lastMouse = { x: 0, y: 0 };
         const CUBE_SIZE = 1;
-        const GAP = 1.05;
+        const GAP = 1.0; // 緊密接合
 
         function initGameEngine() {
             initSelectScreen();
@@ -456,12 +455,12 @@
             const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
             for (let i = 0; i < 9; i++) {
                 const materials = [
-                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[4], i), roughness: 0.3 }), // 4: 一級能源
-                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[5], i), roughness: 0.3 }), // 5: 省水
-                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[2], i), roughness: 0.3 }), // 2: 節能
-                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[3], i), roughness: 0.3 }), // 3: 碳足跡
-                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[0], i), roughness: 0.3 }), // 0: 環保
-                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[1], i), roughness: 0.3 })  // 1: 回收
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[4], i), roughness: 0.3 }),
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[5], i), roughness: 0.3 }),
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[2], i), roughness: 0.3 }),
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[3], i), roughness: 0.3 }),
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[0], i), roughness: 0.3 }),
+                    new THREE.MeshStandardMaterial({ map: getTextureSlice(fullCanvases[1], i), roughness: 0.3 })
                 ];
 
                 const cube = new THREE.Mesh(geometry, materials);
@@ -732,6 +731,49 @@
             selectedCube = null;
         }
 
+        // 🚀 修改 4：像素辨識系統 (Pixel Scanning) - 判定這塊切片是不是純白的
+        const blankCache = {}; 
+        function isSliceBlank(symbolIndex, pieceIndex) {
+            const key = `${symbolIndex}-${pieceIndex}`;
+            if (blankCache[key] !== undefined) return blankCache[key];
+            
+            const sliceCanvas = document.createElement('canvas');
+            const sourceSize = 512 / 3;
+            sliceCanvas.width = 64; 
+            sliceCanvas.height = 64;
+            const ctx = sliceCanvas.getContext('2d', { willReadFrequently: true });
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 64, 64);
+            
+            const col = pieceIndex % 3;
+            const row = Math.floor(pieceIndex / 3);
+            
+            ctx.drawImage(
+                fullCanvases[symbolIndex],
+                col * sourceSize, row * sourceSize, sourceSize, sourceSize,
+                0, 0, 64, 64
+            );
+            
+            try {
+                const data = ctx.getImageData(0, 0, 64, 64).data;
+                for (let i = 0; i < data.length; i += 4) {
+                    // 如果掃描到非白色的像素 (表示上面有圖案)
+                    if (data[i] < 245 || data[i+1] < 245 || data[i+2] < 245) {
+                        blankCache[key] = false;
+                        return false; 
+                    }
+                }
+            } catch(e) {
+                // 如果因為安全限制無法讀取，預設為 false (安全退回嚴格模式)
+                blankCache[key] = false; 
+                return false;
+            }
+            
+            blankCache[key] = true;
+            return true; // 確定這是一塊全白的方塊
+        }
+
         function checkWinCondition() {
             if (!isPlaying) return;
 
@@ -739,7 +781,10 @@
             for (let i = 0; i < 9; i++) {
                 const cube = cubes.find(c => c.userData.currentSlot === i);
                 if (!cube) return; 
-                slots.push(cube);
+            }
+            
+            for (let i = 0; i < 9; i++) {
+                slots.push(cubes.find(c => c.userData.currentSlot === i));
             }
 
             const faceData = [
@@ -794,13 +839,25 @@
                 for (let i = 0; i < 9; i++) {
                     let visualId = slots[i].userData.pieceIndex;
                     for(let r = 0; r < localRots[i]; r++) visualId = map90CW[visualId];
-                    if (visualId !== i) { isCorrect = false; break; }
+                    if (visualId === i) continue;
+
+                    // 🚀 如果方塊放錯了，系統會寬容地檢查：「這是不是一塊可替換的白塊？」
+                    if (isSliceBlank(symbolIndex, i) && isSliceBlank(symbolIndex, slots[i].userData.pieceIndex)) {
+                        continue; // 這個洞本來就是白的，而你放進來的也是一塊白方塊，算你過關！
+                    }
+
+                    isCorrect = false; break;
                 }
             } else { 
                 for (let i = 0; i < 9; i++) {
-                    if (slots[i].userData.pieceIndex !== i || localRots[i] !== 0) {
-                        isCorrect = false; break;
+                    if (slots[i].userData.pieceIndex === i && localRots[i] === 0) continue;
+
+                    // 🚀 如果方塊放錯了，系統會寬容地檢查：「這是不是一塊可替換的白塊？」
+                    if (isSliceBlank(symbolIndex, i) && isSliceBlank(symbolIndex, slots[i].userData.pieceIndex)) {
+                        continue; // 這個洞本來就是白的，而你放進來的也是一塊白方塊，算你過關！
                     }
+
+                    isCorrect = false; break;
                 }
             }
 
