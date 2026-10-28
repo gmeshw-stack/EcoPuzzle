@@ -107,8 +107,8 @@
             <!-- Loading 畫面 -->
             <div id="loading-screen" class="interactive glass-panel p-8 rounded-3xl max-w-sm w-full text-center">
                 <div class="text-4xl mb-4 animate-spin">⏳</div>
-                <h2 class="text-2xl font-bold text-slate-800">正在尋找圖片...</h2>
-                <p class="text-slate-500 text-sm mt-2">智慧掃描 GitHub 檔案中...</p>
+                <h2 class="text-2xl font-bold text-slate-800">正在讀取圖片...</h2>
+                <p class="text-slate-500 text-sm mt-2">請稍候</p>
             </div>
 
             <!-- 開始畫面 -->
@@ -121,11 +121,10 @@
                 <div class="bg-slate-50 p-4 rounded-xl text-left mb-6 border border-slate-100">
                     <h3 class="font-bold text-slate-700 mb-2">🎮 遊戲規則：</h3>
                     <ul class="list-disc pl-5 text-slate-600 space-y-2 text-sm">
-                        <li>左側/上方是<b>散落區</b>，右側/下方是<b>組合區</b>。</li>
-                        <li><b>滑鼠左鍵按住拖曳</b>：將方塊移動放入組合區。</li>
-                        <li><b>滑鼠右鍵按住拖曳</b>：可以<b>自由立體翻轉</b>方塊。</li>
-                        <li>📱<b>平板/手機玩家</b>：請使用畫面下方的按鈕切換「移動」或「旋轉」。</li>
-                        <li><b>點擊方塊</b>：旁邊會出現<b>翻轉工具 ↻</b>，點擊可直接順時針旋轉90度。</li>
+                        <li>左側是<b>散落區</b>，右側是<b>組合區</b>。</li>
+                        <li><b>滑鼠左鍵拖曳</b>：移動方塊。</li>
+                        <li><b>滑鼠右鍵拖曳</b>：自由翻轉方塊。</li>
+                        <li><b>注意外框線</b>：圖片最外圍有極淡的外框，可以幫助你辨認全白方塊的方向！</li>
                     </ul>
                 </div>
                 
@@ -179,7 +178,7 @@
             <!-- 排行榜畫面 -->
             <div id="leaderboard-screen" class="interactive glass-panel p-6 rounded-3xl max-w-md w-full hidden transition-all duration-300 opacity-0 scale-95 flex flex-col max-h-[85vh]">
                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-black text-slate-800">排行榜</h2>
+                    <h2 class="text-2xl font-black text-slate-800">全球排行榜</h2>
                     <button onclick="showScreen('start-screen')" class="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors text-slate-600">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
@@ -207,13 +206,12 @@
         </div>
     </div>
 
-    <!-- 載入 Firebase 與你的資料庫設定 -->
+    <!-- Firebase 系統 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 這是你的專屬資料庫配置！
         const firebaseConfig = {
             apiKey: "AIzaSyAEIxp0FWZH5HxBkjKke70e3K3PpX3Qaw0",
             authDomain: "ecopuzzle-41e41.firebaseapp.com",
@@ -236,15 +234,14 @@
             { name: '省水標章', bg: '#ffffff' }  
         ];
 
-        // 🔥 智慧型圖片路徑偵測系統 🔥
-        // 會自動依序嘗試所有可能的資料夾結構、中英文檔名、甚至 .png.png 隱藏副檔名錯誤
-        const IMAGE_PATHS_TO_TRY = [
-            ['images/eco.png', 'eco.png', 'images/eco.png.png', 'images/環保標章.png', '環保標章.png', 'eco.PNG', 'images/eco.PNG'],
-            ['images/recycle.png', 'recycle.png', 'images/recycle.png.png', 'images/回收標章.png', '回收標章.png', 'recycle.PNG', 'images/recycle.PNG'],
-            ['images/energy.png', 'energy.png', 'images/energy.png.png', 'images/節能標章.png', '節能標章.png', 'images/圖片_2.png', '圖片_2.png'],
-            ['images/carbon.png', 'carbon.png', 'images/carbon.png.png', 'images/碳足跡標章.png', '碳足跡標章.png', 'images/圖片.png', '圖片.png'],
-            ['images/level1.png', 'level1.png', 'images/level1.png.png', 'images/一級能源標章.png', '一級能源效率標章.png', '一級能源標章.png', '一級能源效率標章.png'],
-            ['images/water.png', 'water.png', 'images/water.png.png', 'images/省水標章.png', '省水標章.png', 'water.PNG', 'images/water.PNG']
+        // 讀取你在 GitHub 上的圖片路徑
+        const IMAGE_PATHS = [
+            'images/eco.png',
+            'images/recycle.png',
+            'images/energy.png',
+            'images/carbon.png',
+            'images/level1.png',
+            'images/water.png'
         ];
 
         let fullCanvases = []; 
@@ -297,11 +294,7 @@
                 ctx.fillStyle = '#cbd5e1';
                 ctx.font = 'bold 40px Noto Sans TC, Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('載入圖片失敗', 256, 230);
-                ctx.fillText(`(${info.name})`, 256, 290);
-                ctx.strokeStyle = '#94a3b8';
-                ctx.lineWidth = 10;
-                ctx.strokeRect(20, 20, 472, 472);
+                ctx.fillText('圖片讀取中', 256, 230);
                 return canvas;
             });
         }
@@ -315,33 +308,34 @@
                 canvas.height = 512;
                 const ctx = canvas.getContext('2d');
                 
-                let isLoaded = false;
-                
-                // 依序嘗試我們設定的各種可能路徑
-                for (let path of IMAGE_PATHS_TO_TRY[i]) {
-                    try {
-                        await new Promise((resolve, reject) => {
-                            const img = new Image();
-                            img.crossOrigin = "Anonymous"; 
-                            img.onload = () => {
-                                ctx.fillStyle = '#ffffff';
-                                ctx.fillRect(0, 0, 512, 512);
-                                ctx.drawImage(img, 0, 0, 512, 512);
-                                isLoaded = true;
-                                resolve();
-                            };
-                            img.onerror = () => reject();
-                            img.src = path;
-                        });
-                        console.log(`成功載入: ${path}`);
-                        break; // 只要有一個路徑成功，就跳出迴圈
-                    } catch (e) {
-                        // 失敗了，繼續嘗試陣列中的下一個路徑
-                    }
-                }
+                try {
+                    await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        // 加上時間戳記防止瀏覽器快取讀不到新圖
+                        img.src = IMAGE_PATHS[i] + '?t=' + new Date().getTime(); 
+                        img.crossOrigin = "Anonymous"; 
+                        
+                        img.onload = () => {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, 512, 512);
+                            
+                            // 圖片置中縮放
+                            const scale = Math.min(512 / img.width, 512 / img.height);
+                            const x = (512 - img.width * scale) / 2;
+                            const y = (512 - img.height * scale) / 2;
+                            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                            
+                            // 🔥 防呆系統：畫上淡淡的外框，解決全白方塊陷阱！
+                            ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)'; // 極淡的黑線
+                            ctx.lineWidth = 12; // 邊框厚度
+                            ctx.strokeRect(6, 6, 500, 500);
 
-                if (!isLoaded) {
-                    console.warn(`所有可能路徑都讀取失敗，已套用備用圖案 (索引: ${i})`);
+                            resolve();
+                        };
+                        img.onerror = () => reject();
+                    });
+                } catch (e) {
+                    console.warn(`讀取失敗: ${IMAGE_PATHS[i]}`);
                     ctx.drawImage(fallbacks[i], 0, 0);
                 }
                 
